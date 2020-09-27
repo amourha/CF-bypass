@@ -1,15 +1,18 @@
 package main
 
 import (
-	"fmt"
+	"bufio"
 	"flag"
+	"fmt"
+	"io"
+	"log"
 	"os"
 	"strings"
-	"log"
-	"io"
-	"bufio"
-	"./providers"
+	"sync"
+
 	"./http"
+	"./output"
+	"./providers"
 )
 
 const (
@@ -17,15 +20,63 @@ const (
 )
 
 func run(config *providers.Config, domains []string) {
+	var allProviders []providers.Provider
+
+	for _, providerName := range config.Providers {
+		switch providerName {
+		case "viewdns":
+			viewDNSObj := providers.NewViewDns(config)
+			allProviders = append(allProviders, viewDNSObj)
+		default:
+			fmt.Fprintf(os.Stderr, "Error: %s is not a valid provider\n", providerName)
+		}
+	}
+
+	resultsChannel := make(chan string)
+	writewg := &sync.WaitGroup{}
+	writewg.Add(1)
+
+	// Start writer thread
+	go func() {
+		defer writewg.Done()
+		err := output.Write(resultsChannel, config.Output)
+		if nil != err {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}()
+
+	for _, domain := range domains {
+		// Run all providers in parallel
+		wg := &sync.WaitGroup{}
+		wg.Add(len(allProviders))
+
+		for _, provider := range allProviders {
+			go func(p providers.Provider) {
+				defer wg.Done()
+				err := p.BypassCF(domain, resultsChannel)
+				if nil != err && config.Verbose {
+					fmt.Fprintln(os.Stderr, err)
+				}
+			}(provider)
+		}
+		// Wait for providers to finish
+		wg.Wait()
+	}
+
+	// Close results channel so the writer can return
+	close(resultsChannel)
+	// Wait for writer to finish
+	writewg.Wait()
+	os.Exit(0)
 }
 
 func main() {
 	verbose := flag.Bool("v", false, "enable verbose mode")
-	useProviders := flag.String("providers", "provider1,provider2", "providers to try")
+	useProviders := flag.String("providers", "viewdns", "providers to try")
 	version := flag.Bool("version", false, "show cf-bypass version")
 	maxRetries := flag.Uint("retries", 5, "amount of retries for http client")
 	output := flag.String("o", "", "filename to write results to")
-	jsonOut := flag.Bool("json", false, "write output as json")
 	flag.Parse()
 
 	if *version {
@@ -57,12 +108,11 @@ func main() {
 		}
 	}
 
-	config := providers.Config {
-		Verbose:           *verbose,
-		Output:             out,
-		JSON:              *jsonOut,
+	config := providers.Config{
+		Verbose:   *verbose,
+		Output:    out,
 		Providers: strings.Split(*useProviders, ","),
-		Client: http.NewHTTPClient(*maxRetries),
+		Client:    http.NewHTTPClient(*maxRetries),
 	}
 
 	run(&config, domains)
