@@ -1,9 +1,9 @@
 package http
 
 import (
-	"time"
 	"net"
 	"net/http"
+	"time"
 )
 
 const (
@@ -11,11 +11,11 @@ const (
 )
 
 type Client struct {
-	clientObj 	*http.Client
-	maxRetries 	uint
+	clientObj  *http.Client
+	maxRetries uint
 }
 
-func NewHTTPClient(maxRetries uint) (*Client) {
+func NewHTTPClient(maxRetries uint) *Client {
 	// Setup http client
 	client := &http.Client{
 		Timeout: time.Second * 15,
@@ -27,8 +27,8 @@ func NewHTTPClient(maxRetries uint) (*Client) {
 		},
 	}
 
-	return &Client {
-		clientObj: client,
+	return &Client{
+		clientObj:  client,
 		maxRetries: maxRetries,
 	}
 }
@@ -43,7 +43,7 @@ func (httpClient *Client) DoRequest(url string) (*http.Response, error) {
 			continue
 		}
 
-		req.Header.Add("User-Agent", userAgent)
+		// req.Header.Add("User-Agent", userAgent) <-- TODO: Make the UA optional for some of the providers.
 		resp, err := httpClient.clientObj.Do(req)
 		if nil == err {
 			// If it got here we succeeded
