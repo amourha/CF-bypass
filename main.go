@@ -1,17 +1,18 @@
 package main
 
 import (
-	"fmt"
+	"bufio"
 	"flag"
+	"fmt"
+	"io"
+	"log"
 	"os"
 	"strings"
-	"log"
-	"io"
-	"bufio"
 	"sync"
-	"./providers"
+
 	"./http"
 	"./output"
+	"./providers"
 )
 
 const (
@@ -26,6 +27,9 @@ func run(config *providers.Config, domains []string) {
 		case "viewdns":
 			viewDNSObj := providers.NewViewDns(config)
 			allProviders = append(allProviders, viewDNSObj)
+		case "shodan":
+			shodanObj := providers.NewShodan(config)
+			allProviders = append(allProviders, shodanObj)
 		default:
 			fmt.Fprintf(os.Stderr, "Error: %s is not a valid provider\n", providerName)
 		}
@@ -76,6 +80,7 @@ func main() {
 	version := flag.Bool("version", false, "show cf-bypass version")
 	maxRetries := flag.Uint("retries", 5, "amount of retries for http client")
 	output := flag.String("o", "", "filename to write results to")
+	shodanAPIKey := flag.String("shodan-key", "", "Your Shodan API key. Required for the shodan provider")
 	flag.Parse()
 
 	if *version {
@@ -107,11 +112,12 @@ func main() {
 		}
 	}
 
-	config := providers.Config {
-		Verbose:           *verbose,
-		Output:             out,
-		Providers: strings.Split(*useProviders, ","),
-		Client: http.NewHTTPClient(*maxRetries),
+	config := providers.Config{
+		Verbose:      *verbose,
+		Output:       out,
+		Providers:    strings.Split(*useProviders, ","),
+		Client:       http.NewHTTPClient(*maxRetries),
+		ShodanAPIKey: *shodanAPIKey,
 	}
 
 	run(&config, domains)
